@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: langfuse_postgres
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+      POSTGRES_DB: langfuse
+    volumes:
+      - langfuse_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - langfuse_network
+
+  langfuse:
+    image: ghcr.io/langfuse/langfuse:latest
+    container_name: langfuse_server
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database configuration
+      DATABASE_URL: postgresql://langfuse:langfuse@postgres:5432/langfuse
+
+      # Authentication
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-secret-key-change-me-in-production}
+      NEXTAUTH_URL: http://localhost:3001
+      SALT: ${SALT:-salt-change-me-in-production}
+
+      # CORS settings
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:5173,http://localhost:5174"
+    ports:
+      - "3001:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - langfuse_network
+    restart: unless-stopped
+
+volumes:
+  langfuse_postgres_data:
+    driver: local
+
+networks:
+  langfuse_network:
+    driver: bridge
